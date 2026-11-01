@@ -179,16 +179,39 @@ export interface TokenCounterResult {
 }
 
 export interface AgentTelemetryEvent {
-  crawler: string;
+  domain: string;
+  siteId: string;
   path: string;
-  format: 'html' | 'markdown';
+  bot: string;
+  userAgent: string;
+  status: number;
+  cached: boolean;
+  sample: boolean;
+  durationMs: number;
+  format: 'html' | 'markdown' | 'clean-html';
+  rawBytes: number;
+  cleanBytes: number;
+  htmlBytes: number;
+  markdownBytes: number;
   rawTokens: number;
   cleanTokens: number;
   savedTokens: number;
   reductionPercentage: number;
-  durationMs: number;
-  statusCode: number;
-  timestamp: number;
+  timestamp?: number;
+
+  /**
+   * Compatibility alias for bot.
+   */
+  crawler?: string;
+
+  /**
+   * Compatibility alias for status.
+   */
+  statusCode?: number;
+
+  /**
+   * Compatibility alias for cached.
+   */
   cacheHit?: boolean;
 }
 

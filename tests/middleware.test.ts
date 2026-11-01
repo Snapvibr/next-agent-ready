@@ -107,7 +107,10 @@ describe('middleware', () => {
       expect(res?.status).toBe(200);
       expect(res?.headers.get('Content-Type')).toBe('text/html; charset=utf-8');
       expect(res?.headers.get('X-SnapVibr-Agent')).toBe('ready');
+      expect(res?.headers.get('X-SnapVibr-Cache')).toBe('MISS');
       expect(res?.headers.get('X-Agent-Ready-Cache')).toBe('MISS');
+      expect(res?.headers.get('X-SnapVibr-Raw-Bytes')).toBeDefined();
+      expect(res?.headers.get('X-SnapVibr-Clean-Bytes')).toBeDefined();
       expect(res?.headers.get('X-Agent-Ready-Compression')).toBeDefined();
 
       const text = await res?.text();
@@ -117,6 +120,44 @@ describe('middleware', () => {
       // Second request should hit cache
       const res2 = await middleware(req);
       expect(res2?.headers.get('X-Agent-Ready-Cache')).toBe('HIT');
+      expect(res2?.headers.get('X-SnapVibr-Cache')).toBe('HIT');
+    });
+
+    it('bypasses agent middleware on routes matching remote excludedRoutes', async () => {
+      // Mock fetch: first call is remote grounding fetch, second call would be upstream
+      const mockFetch = vi.fn().mockImplementation(async (url: string) => {
+        if (String(url).includes('/ai-visibility/grounding')) {
+          return new Response(JSON.stringify({
+            domain: 'example.com',
+            enabled: true,
+            groundingEnabled: true,
+            brandFacts: 'Acme Grounding Facts',
+            excludedRoutes: ['/api/*', '/checkout', '/admin*'],
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        return new Response('<h1>Normal Upstream</h1>', { status: 200, headers: { 'Content-Type': 'text/html' } });
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const middleware = createAgentReadyMiddleware({
+        snapvibrApiKey: 'sk_test_remote_bypass',
+      });
+
+      // Request on excluded route should return undefined (bypassed)
+      const excludedReq = new Request('https://example.com/api/v1/users', {
+        headers: { 'user-agent': 'ChatGPT-User/1.0' },
+      });
+      const excludedRes = await middleware(excludedReq);
+      expect(excludedRes).toBeUndefined();
+
+      // Request on non-excluded route should be handled
+      const allowedReq = new Request('https://example.com/pricing', {
+        headers: { 'user-agent': 'ChatGPT-User/1.0' },
+      });
+      const allowedRes = await middleware(allowedReq);
+      expect(allowedRes).toBeDefined();
+      expect(allowedRes?.status).toBe(200);
+      expect(allowedRes?.headers.get('X-SnapVibr-Agent')).toBe('ready');
     });
   });
 });

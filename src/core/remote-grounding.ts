@@ -9,6 +9,20 @@ import type { BrandGroundingConfig, VerifiedPricingItem } from '../types/index.j
 
 export const DEFAULT_SNAPVIBR_GROUNDING_ENDPOINT = 'https://ingest.snapvibr.com/api/v1/ai-visibility/grounding';
 
+/**
+ * Resolves the SnapVibr grounding endpoint respecting options and environment variables.
+ */
+export function resolveGroundingEndpoint(customEndpoint?: string): string {
+  if (customEndpoint) return customEndpoint;
+  if (typeof process !== 'undefined') {
+    if (process.env?.SNAPVIBR_GROUNDING_URL) return process.env.SNAPVIBR_GROUNDING_URL;
+    if (process.env?.SNAPVIBR_INGEST_URL) {
+      return process.env.SNAPVIBR_INGEST_URL.replace(/\/telemetry$/, '/grounding');
+    }
+  }
+  return DEFAULT_SNAPVIBR_GROUNDING_ENDPOINT;
+}
+
 export interface RemoteGroundingPayload {
   domain: string;
   enabled: boolean;
@@ -93,14 +107,28 @@ export function transformRemotePayloadToGroundingConfig(
   }
 
   const verifiedPricing = parsePricingOverride(payload.pricingOverride);
+  const brandName = factsList[0] || payload.domain;
+
+  const defaultJsonLd: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: brandName,
+    url: `https://${payload.domain}`,
+    publisher: {
+      '@type': 'Organization',
+      name: brandName,
+      url: `https://${payload.domain}`,
+    },
+  };
 
   return {
-    brandName: factsList[0] || payload.domain,
+    brandName,
     canonicalUrl: `https://${payload.domain}`,
     description: factsList[1] || undefined,
     facts: factsList.length > 2 ? factsList.slice(2) : factsList,
     verifiedPricing: verifiedPricing.length > 0 ? verifiedPricing : undefined,
     excludedRoutes: Array.isArray(payload.excludedRoutes) ? payload.excludedRoutes : undefined,
+    jsonLd: defaultJsonLd,
   };
 }
 
@@ -111,11 +139,12 @@ export function transformRemotePayloadToGroundingConfig(
 export async function fetchRemoteBrandGrounding(
   domain: string,
   apiKey: string,
-  endpoint = DEFAULT_SNAPVIBR_GROUNDING_ENDPOINT
+  endpoint?: string
 ): Promise<(BrandGroundingConfig & { excludedRoutes?: string[] }) | undefined> {
   if (!domain || !apiKey) return undefined;
 
   const cleanDomain = domain.toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  const targetEndpoint = resolveGroundingEndpoint(endpoint);
   const cacheKey = `${cleanDomain}:${apiKey.slice(0, 8)}`;
 
   const cached = groundingCache.get(cacheKey);
@@ -124,7 +153,7 @@ export async function fetchRemoteBrandGrounding(
   }
 
   try {
-    const url = new URL(endpoint);
+    const url = new URL(targetEndpoint);
     url.searchParams.set('domain', cleanDomain);
 
     const res = await fetch(url.toString(), {
