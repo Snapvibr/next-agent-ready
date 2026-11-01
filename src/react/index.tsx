@@ -14,7 +14,7 @@ export interface AgentGroundingProps {
  */
 export function AgentGrounding({ brand }: AgentGroundingProps): React.JSX.Element {
   return (
-    <section data-snapvibr-grounding="true" style={{ display: 'none' }} aria-hidden="false">
+    <section className="site-overview" style={{ display: 'none' }} aria-hidden="false">
       {brand.brandName && <h2>{brand.brandName}</h2>}
       {brand.tagline && <p><strong>Tagline:</strong> {brand.tagline}</p>}
       {brand.description && <p><strong>Description:</strong> {brand.description}</p>}

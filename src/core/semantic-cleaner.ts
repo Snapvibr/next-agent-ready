@@ -155,14 +155,13 @@ function cleanTagAttributes(
   // Preserve agent data attributes if present
   let agentAttrs = '';
   const agentOnly = /\bdata-agent-only=["']?(?:true|1)?["']?/i.test(tag);
-  const agentGrounding = /\bdata-snapvibr-grounding=["']?(?:true|1)?["']?/i.test(tag) || /\bsnapvibr-grounding\b/i.test(tag);
+  const siteOverview = /\bsite-overview\b/i.test(tag) || /\bbrand-overview\b/i.test(tag);
 
-  if (lowerTag === 'section' && agentGrounding) {
-    return `<section class="snapvibr-grounding" data-snapvibr-grounding="true" aria-label="Brand Grounding"${isSelfClosing ? ' />' : '>'}`;
+  if (lowerTag === 'section' && siteOverview) {
+    return `<section class="site-overview"${isSelfClosing ? ' />' : '>'}`;
   }
 
   if (agentOnly) agentAttrs += ' data-agent-only="true"';
-  if (agentGrounding) agentAttrs += ' class="snapvibr-grounding" data-snapvibr-grounding="true" aria-label="Brand Grounding"';
 
   // For all standard semantic elements: h1-h6, p, table, thead, tbody, tr, ul, ol, li,
   // blockquote, pre, code, strong, em, b, i, main, article, section
