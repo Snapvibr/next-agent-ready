@@ -92,19 +92,19 @@ describe('detector', () => {
       expect(getRequestedAgentFormat(req)).toBe('html');
     });
 
-    it('returns markdown when Accept header prioritizes text/markdown', () => {
+    it('returns html when Accept header prioritizes text/markdown', () => {
       const req = new Request('https://example.com/pricing', {
         headers: {
           'user-agent': 'Claude-Code/1.0',
           'accept': 'text/markdown, text/html;q=0.8',
         },
       });
-      expect(getRequestedAgentFormat(req)).toBe('markdown');
+      expect(getRequestedAgentFormat(req)).toBe('html');
     });
 
-    it('returns markdown when query param format=markdown is set', () => {
+    it('returns html when query param format=markdown is set', () => {
       const req = new Request('https://example.com/pricing?format=markdown');
-      expect(getRequestedAgentFormat(req)).toBe('markdown');
+      expect(getRequestedAgentFormat(req)).toBe('html');
     });
 
     it('returns html when query param format=html is set', () => {

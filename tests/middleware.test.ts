@@ -51,15 +51,15 @@ describe('middleware', () => {
       expect(result.tokens.savedTokens).toBeGreaterThan(0);
     });
 
-    it('converts to markdown when format is markdown', async () => {
+    it('serves clean semantic HTML even if format is markdown', async () => {
       const result = await transformToAgentReady(sampleRawHtml, undefined, {
         format: 'markdown',
       });
 
-      expect(result.contentType).toBe('text/markdown; charset=utf-8');
-      expect(result.format).toBe('markdown');
-      expect(result.content).toContain('# Platform Overview');
-      expect(result.content).not.toContain('<h1');
+      expect(result.contentType).toBe('text/html; charset=utf-8');
+      expect(result.format).toBe('html');
+      expect(result.content).toContain('Platform Overview');
+      expect(result.content).not.toContain('<script');
     });
   });
 

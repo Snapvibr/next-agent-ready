@@ -79,17 +79,9 @@ export async function transformToAgentReady(
 
   const grounded = injectBrandGrounding(cleaned, groundingConfig);
 
-  // 4. If markdown format requested, convert clean semantic HTML to markdown
-  let finalContent: string;
-  let contentType: string;
-
-  if (format === 'markdown') {
-    finalContent = convertSemanticHtmlToMarkdown(grounded);
-    contentType = 'text/markdown; charset=utf-8';
-  } else {
-    finalContent = grounded;
-    contentType = 'text/html; charset=utf-8';
-  }
+  // 4. Deliver trimmed, token-efficient semantic HTML with brand grounding
+  let finalContent: string = grounded;
+  const contentType = 'text/html; charset=utf-8';
 
   // 5. Allow optional custom user transform hook
   if (typeof options?.transformHtml === 'function') {
@@ -106,7 +98,7 @@ export async function transformToAgentReady(
   return {
     content: finalContent,
     contentType,
-    format,
+    format: 'html',
     tokens,
   };
 }
@@ -211,8 +203,8 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
           format,
           rawBytes: cached.rawBytes,
           cleanBytes: cached.cleanBytes,
-          htmlBytes: format === 'html' ? cached.rawBytes : 0,
-          markdownBytes: format === 'markdown' ? cached.cleanBytes : 0,
+          htmlBytes: cached.rawBytes,
+          markdownBytes: cached.cleanBytes,
           rawTokens: cached.tokens.rawTokens,
           cleanTokens: cached.tokens.cleanTokens,
           savedTokens: cached.tokens.savedTokens,
@@ -298,8 +290,8 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
         format,
         rawBytes,
         cleanBytes,
-        htmlBytes: format === 'html' ? rawBytes : 0,
-        markdownBytes: format === 'markdown' ? cleanBytes : 0,
+        htmlBytes: rawBytes,
+        markdownBytes: cleanBytes,
         rawTokens: transformed.tokens.rawTokens,
         cleanTokens: transformed.tokens.cleanTokens,
         savedTokens: transformed.tokens.savedTokens,

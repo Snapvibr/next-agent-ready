@@ -144,15 +144,14 @@ export function wantsExplicitMarkdown(acceptHeader?: string | null): boolean {
 }
 
 /**
- * Parses the preferred format from the request.
- * Returns 'markdown' if Accept explicitly favors text/markdown or query specifies markdown.
- * Returns 'html' if AI crawler requests page or query specifies html.
+ * Determines if the request is an AI crawler or agent-ready query/accept request.
+ * Always returns 'html' for agent requests to ensure trimmed semantic HTML is served.
  * Returns null if not an AI agent request.
  */
 export function getRequestedAgentFormat(
   request: Request | { headers: Headers | Record<string, string>; url: string },
   options?: DetectionOptions
-): 'html' | 'markdown' | null {
+): 'html' | null {
   // 1. Query parameter check
   try {
     const url = new URL(request.url, 'http://localhost');
@@ -161,31 +160,17 @@ export function getRequestedAgentFormat(
     for (const key of paramKeys) {
       const val = url.searchParams.get(key);
       if (val !== null) {
-        const lowerVal = val.toLowerCase().trim();
-        if (lowerVal === 'markdown' || lowerVal === 'md') {
-          return 'markdown';
-        }
-        if (
-          lowerVal === 'html' ||
-          lowerVal === 'ready' ||
-          lowerVal === 'true' ||
-          lowerVal === '1' ||
-          lowerVal === ''
-        ) {
-          return 'html';
-        }
+        return 'html';
       }
     }
   } catch {
     // If URL parsing fails, continue to headers
   }
 
-  // 2. Accept Header negotiation with q-values
+  // 2. Accept Header negotiation
   const acceptHeader = getHeader(request, 'accept');
-  const allowMarkdown = options?.allowMarkdownAccept !== false;
-
-  if (allowMarkdown && wantsExplicitMarkdown(acceptHeader)) {
-    return 'markdown';
+  if (wantsExplicitMarkdown(acceptHeader)) {
+    return 'html';
   }
 
   // 3. User-Agent detection
