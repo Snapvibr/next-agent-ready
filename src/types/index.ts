@@ -262,6 +262,29 @@ export interface AgentReadyOptions {
   cleaner?: CleanerOptions;
 
   /**
+   * Optional SnapVibr API key (or specify in telemetry.snapvibrApiKey).
+   * Automatically fetches verified Brand Grounding facts from the SnapVibr API.
+   */
+  snapvibrApiKey?: string;
+
+  /**
+   * SnapVibr site ID.
+   */
+  siteId?: string;
+
+  /**
+   * Custom SnapVibr Grounding endpoint URL.
+   * Defaults to 'https://ingest.snapvibr.com/api/v1/ai-visibility/grounding'.
+   */
+  groundingEndpoint?: string;
+
+  /**
+   * Whether to automatically fetch remote grounding facts from SnapVibr when an API key is provided.
+   * @default true
+   */
+  autoFetchRemoteGrounding?: boolean;
+
+  /**
    * Brand grounding facts and JSON-LD schema to inject.
    * Can be an object or a function that receives the request.
    */
