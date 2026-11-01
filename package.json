@@ -1,0 +1,91 @@
+{
+  "name": "next-agent-ready",
+  "version": "1.0.0",
+  "description": "High-performance, zero-dependency Next.js edge and node middleware that intercepts AI crawlers and serves token-compressed, clean semantic HTML with grounded brand facts at edge speed.",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./middleware": {
+      "types": "./dist/middleware.d.ts",
+      "import": "./dist/middleware.mjs",
+      "require": "./dist/middleware.cjs"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.mjs",
+      "require": "./dist/react.cjs"
+    },
+    "./telemetry": {
+      "types": "./dist/telemetry.d.ts",
+      "import": "./dist/telemetry.mjs",
+      "require": "./dist/telemetry.cjs"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.mjs",
+      "require": "./dist/types.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "skills"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "nextjs",
+    "ai-agents",
+    "semantic-html",
+    "token-compression",
+    "aeo",
+    "edge-runtime",
+    "brand-grounding",
+    "crawler",
+    "chatgpt",
+    "claudebot",
+    "perplexity",
+    "applebot",
+    "deepseek"
+  ],
+  "author": "SnapVibr <snapvibr.com@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Snapvibr/next-agent-ready.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Snapvibr/next-agent-ready/issues"
+  },
+  "homepage": "https://snapvibr.com",
+  "peerDependencies": {
+    "next": ">=13.0.0",
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "next": "^14.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
