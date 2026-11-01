@@ -24,6 +24,13 @@ export {
   renderJsonLdScripts,
 } from './core/grounding-injector.js';
 
+export {
+  fetchRemoteBrandGrounding,
+  transformRemotePayloadToGroundingConfig,
+  DEFAULT_SNAPVIBR_GROUNDING_ENDPOINT,
+} from './core/remote-grounding.js';
+export type { RemoteGroundingPayload } from './core/remote-grounding.js';
+
 // AI Crawler detection and content negotiation
 export {
   DEFAULT_AI_CRAWLERS,

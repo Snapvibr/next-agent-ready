@@ -13,6 +13,7 @@ import {
 } from '../core/detector.js';
 import { calculateTokenCompression } from '../core/token-counter.js';
 import { convertSemanticHtmlToMarkdown } from '../core/text-serializer.js';
+import { fetchRemoteBrandGrounding } from '../core/remote-grounding.js';
 import { dispatchTelemetry } from '../telemetry/index.js';
 import { MemoryCache } from '../cache/index.js';
 import type {
@@ -56,8 +57,21 @@ export async function transformToAgentReady(
   if (typeof options?.grounding === 'function') {
     const dummyReq = new Request(context?.url ?? 'http://localhost');
     groundingConfig = await options.grounding(dummyReq);
-  } else {
-    groundingConfig = options?.grounding;
+  } else if (options?.grounding) {
+    groundingConfig = options.grounding;
+  } else if (options?.autoFetchRemoteGrounding !== false) {
+    const snapvibrKey =
+      options?.snapvibrApiKey ||
+      options?.telemetry?.snapvibrApiKey ||
+      (typeof process !== 'undefined' ? process.env?.SNAPVIBR_API_KEY : undefined);
+    if (snapvibrKey && context?.url) {
+      try {
+        const hostname = new URL(context.url).hostname;
+        groundingConfig = await fetchRemoteBrandGrounding(hostname, snapvibrKey, options?.groundingEndpoint);
+      } catch {
+        // Continue without remote grounding if URL is malformed
+      }
+    }
   }
 
   const grounded = injectBrandGrounding(cleaned, groundingConfig);
@@ -133,12 +147,35 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
     const userAgent = request.headers.get('user-agent') ?? '';
     const crawlerName = identifyCrawler(userAgent, options?.detection?.customUserAgents) ?? 'custom-agent';
 
+    // Check remote excluded routes if SnapVibr API key is present
+    const snapvibrKey =
+      options?.snapvibrApiKey ||
+      options?.telemetry?.snapvibrApiKey ||
+      (typeof process !== 'undefined' ? process.env?.SNAPVIBR_API_KEY : undefined);
+
+    if (snapvibrKey && options?.autoFetchRemoteGrounding !== false) {
+      try {
+        const remote = await fetchRemoteBrandGrounding(url.hostname, snapvibrKey, options?.groundingEndpoint);
+        if (remote?.excludedRoutes && remote.excludedRoutes.length > 0) {
+          if (matchesRouteFilters(pathname, undefined, remote.excludedRoutes)) {
+            return undefined;
+          }
+        }
+      } catch {
+        // Fallback to serving request if remote check fails
+      }
+    }
+
     // Check cache
     const cacheKey = `${pathname}:${format}`;
     if (cache) {
       const cached = cache.get(cacheKey);
       if (cached) {
         const durationMs = Date.now() - startTime;
+        const effectiveTelemetry = {
+          ...options?.telemetry,
+          snapvibrApiKey: options?.telemetry?.snapvibrApiKey ?? options?.snapvibrApiKey ?? (typeof process !== 'undefined' ? process.env?.SNAPVIBR_API_KEY : undefined),
+        };
         dispatchTelemetry(
           {
             crawler: crawlerName,
@@ -153,7 +190,7 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
             timestamp: Date.now(),
             cacheHit: true,
           },
-          options?.telemetry,
+          effectiveTelemetry,
           event?.waitUntil
         );
 
@@ -220,7 +257,12 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
         cacheHit: false,
       };
 
-      dispatchTelemetry(telemetryEvent, options?.telemetry, event?.waitUntil);
+      const effectiveTelemetry = {
+        ...options?.telemetry,
+        snapvibrApiKey: options?.telemetry?.snapvibrApiKey ?? options?.snapvibrApiKey ?? (typeof process !== 'undefined' ? process.env?.SNAPVIBR_API_KEY : undefined),
+      };
+
+      dispatchTelemetry(telemetryEvent, effectiveTelemetry, event?.waitUntil);
 
       return new Response(transformed.content, {
         status: upstreamRes.status,
