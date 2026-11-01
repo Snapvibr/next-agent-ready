@@ -18,7 +18,7 @@ AI search engines and frontier crawlers (ChatGPT-User, ClaudeBot, PerplexityBot,
 - **Aggressive Bloat Stripping**: Removes client JavaScript bundles, Tailwind utility classes, inline styles, IDs, SVG sprites, React hydration markers (`data-reactroot`), navbars, footers, sidebars, modals, and cookie banners.
 - **Brand Grounding Context**: Injects authoritative brand facts, verified pricing, canonical URLs, and Schema.org JSON-LD directly into the HTML document to ensure AI search citations are 100% accurate.
 - **Edge and Node Runtime Ready**: Zero external runtime dependencies. Runs with sub-millisecond overhead on Vercel Edge, Cloudflare Workers, Node.js, and standard serverless runtimes.
-- **Markdown Content Negotiation**: Seamlessly serves crisp Markdown (`Content-Type: text/markdown; charset=utf-8`) when agents (such as Claude Code or CLI tools) explicitly request it via `Accept: text/markdown`.
+- **Consistent Semantic HTML Delivery**: Always serves clean, token-efficient semantic HTML (`Content-Type: text/html; charset=utf-8`) across all AI agents and crawlers, avoiding content-type errors in AI browsing tools.
 - **Non-blocking Telemetry**: Measures token compression ratios and dispatches async analytics to SnapVibr, Axiom, or custom endpoints.
 
 ---
@@ -260,8 +260,8 @@ Test your setup locally with curl:
 # Test HTML agent response
 curl -i -A "ChatGPT-User" http://localhost:3000/
 
-# Test explicit Markdown format negotiation
-curl -i -H "Accept: text/markdown" http://localhost:3000/
+# Test agent response via query param
+curl -i http://localhost:3000/?agent=1
 ```
 
 ---
