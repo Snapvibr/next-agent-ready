@@ -7,8 +7,11 @@ import { stripHtmlBloat } from '../core/html-stripper.js';
 import { cleanSemanticHtml } from '../core/semantic-cleaner.js';
 import { injectBrandGrounding } from '../core/grounding-injector.js';
 import {
+  getCrawlerDisplayName,
   getRequestedAgentFormat,
   identifyCrawler,
+  isAiCrawler,
+  isRouteExcluded,
   matchesRouteFilters,
 } from '../core/detector.js';
 import { calculateTokenCompression } from '../core/token-counter.js';
@@ -108,12 +111,21 @@ export async function transformToAgentReady(
   };
 }
 
+export interface CachedAgentResponse {
+  content: string;
+  contentType: string;
+  format: 'html' | 'markdown';
+  tokens: TokenCounterResult;
+  rawBytes: number;
+  cleanBytes: number;
+}
+
 /**
  * Creates a Next.js middleware that intercepts AI crawlers and returns token-compressed semantic HTML.
  */
 export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
   const cache = options?.cache?.enabled !== false
-    ? new MemoryCache<{ content: string; contentType: string; tokens: TokenCounterResult }>(
+    ? new MemoryCache<CachedAgentResponse>(
         options?.cache?.maxEntries ?? 500,
         options?.cache?.ttlMs ?? 300000
       )
@@ -145,7 +157,15 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
     }
 
     const userAgent = request.headers.get('user-agent') ?? '';
-    const crawlerName = identifyCrawler(userAgent, options?.detection?.customUserAgents) ?? 'custom-agent';
+    const rawCrawler = identifyCrawler(userAgent, options?.detection?.customUserAgents);
+    const crawlerName = rawCrawler ?? 'Accept-Header-Client';
+    const botDisplayName = getCrawlerDisplayName(rawCrawler);
+    const siteId =
+      options?.siteId ||
+      (typeof process !== 'undefined' ? process.env?.SNAPVIBR_SITE_ID : undefined) ||
+      url.hostname;
+    const isBot = isAiCrawler(userAgent, options?.detection);
+    const sample = request.headers.get('x-snapvibr-test') === '1' || !isBot;
 
     // Check remote excluded routes if SnapVibr API key is present
     const snapvibrKey =
@@ -156,10 +176,8 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
     if (snapvibrKey && options?.autoFetchRemoteGrounding !== false) {
       try {
         const remote = await fetchRemoteBrandGrounding(url.hostname, snapvibrKey, options?.groundingEndpoint);
-        if (remote?.excludedRoutes && remote.excludedRoutes.length > 0) {
-          if (matchesRouteFilters(pathname, undefined, remote.excludedRoutes)) {
-            return undefined;
-          }
+        if (remote?.excludedRoutes && isRouteExcluded(pathname, remote.excludedRoutes)) {
+          return undefined;
         }
       } catch {
         // Fallback to serving request if remote check fails
@@ -174,35 +192,52 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
         const durationMs = Date.now() - startTime;
         const effectiveTelemetry = {
           ...options?.telemetry,
-          snapvibrApiKey: options?.telemetry?.snapvibrApiKey ?? options?.snapvibrApiKey ?? (typeof process !== 'undefined' ? process.env?.SNAPVIBR_API_KEY : undefined),
+          snapvibrApiKey:
+            options?.telemetry?.snapvibrApiKey ??
+            options?.snapvibrApiKey ??
+            (typeof process !== 'undefined' ? process.env?.SNAPVIBR_API_KEY : undefined),
         };
-        dispatchTelemetry(
-          {
-            crawler: crawlerName,
-            path: pathname,
-            format,
-            rawTokens: cached.tokens.rawTokens,
-            cleanTokens: cached.tokens.cleanTokens,
-            savedTokens: cached.tokens.savedTokens,
-            reductionPercentage: cached.tokens.reductionPercentage,
-            durationMs,
-            statusCode: 200,
-            timestamp: Date.now(),
-            cacheHit: true,
-          },
-          effectiveTelemetry,
-          event?.waitUntil
-        );
+
+        const telemetryPayload: AgentTelemetryEvent = {
+          domain: url.hostname,
+          siteId,
+          path: pathname,
+          bot: botDisplayName,
+          userAgent,
+          status: 200,
+          cached: true,
+          sample,
+          durationMs,
+          format,
+          rawBytes: cached.rawBytes,
+          cleanBytes: cached.cleanBytes,
+          htmlBytes: format === 'html' ? cached.rawBytes : 0,
+          markdownBytes: format === 'markdown' ? cached.cleanBytes : 0,
+          rawTokens: cached.tokens.rawTokens,
+          cleanTokens: cached.tokens.cleanTokens,
+          savedTokens: cached.tokens.savedTokens,
+          reductionPercentage: cached.tokens.reductionPercentage,
+          timestamp: Date.now(),
+          // Compatibility aliases
+          crawler: crawlerName,
+          statusCode: 200,
+          cacheHit: true,
+        };
+
+        dispatchTelemetry(telemetryPayload, effectiveTelemetry, event?.waitUntil);
 
         return new Response(cached.content, {
           status: 200,
           headers: {
             'Content-Type': cached.contentType,
             'X-SnapVibr-Agent': 'ready',
+            'X-SnapVibr-Cache': 'HIT',
             'X-Agent-Ready-Cache': 'HIT',
             'X-Agent-Ready-Tokens-Raw': String(cached.tokens.rawTokens),
             'X-Agent-Ready-Tokens-Clean': String(cached.tokens.cleanTokens),
             'X-Agent-Ready-Compression': `${cached.tokens.reductionPercentage}%`,
+            'X-SnapVibr-Raw-Bytes': String(cached.rawBytes),
+            'X-SnapVibr-Clean-Bytes': String(cached.cleanBytes),
             'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=600',
             'Vary': 'Accept, User-Agent',
           },
@@ -227,6 +262,7 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
       }
 
       const rawHtml = await upstreamRes.text();
+      const rawBytes = new TextEncoder().encode(rawHtml).byteLength;
 
       // Transform HTML
       const transformed = await transformToAgentReady(rawHtml, options, {
@@ -235,31 +271,52 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
         userAgent,
       });
 
+      const cleanBytes = new TextEncoder().encode(transformed.content).byteLength;
+
       // Save to cache
       if (cache) {
-        cache.set(cacheKey, transformed);
+        cache.set(cacheKey, {
+          ...transformed,
+          rawBytes,
+          cleanBytes,
+        });
       }
 
       const durationMs = Date.now() - startTime;
 
       // Dispatch non-blocking telemetry
       const telemetryEvent: AgentTelemetryEvent = {
-        crawler: crawlerName,
+        domain: url.hostname,
+        siteId,
         path: pathname,
+        bot: botDisplayName,
+        userAgent,
+        status: upstreamRes.status,
+        cached: false,
+        sample,
+        durationMs,
         format,
+        rawBytes,
+        cleanBytes,
+        htmlBytes: format === 'html' ? rawBytes : 0,
+        markdownBytes: format === 'markdown' ? cleanBytes : 0,
         rawTokens: transformed.tokens.rawTokens,
         cleanTokens: transformed.tokens.cleanTokens,
         savedTokens: transformed.tokens.savedTokens,
         reductionPercentage: transformed.tokens.reductionPercentage,
-        durationMs,
-        statusCode: upstreamRes.status,
         timestamp: Date.now(),
+        // Compatibility aliases
+        crawler: crawlerName,
+        statusCode: upstreamRes.status,
         cacheHit: false,
       };
 
       const effectiveTelemetry = {
         ...options?.telemetry,
-        snapvibrApiKey: options?.telemetry?.snapvibrApiKey ?? options?.snapvibrApiKey ?? (typeof process !== 'undefined' ? process.env?.SNAPVIBR_API_KEY : undefined),
+        snapvibrApiKey:
+          options?.telemetry?.snapvibrApiKey ??
+          options?.snapvibrApiKey ??
+          (typeof process !== 'undefined' ? process.env?.SNAPVIBR_API_KEY : undefined),
       };
 
       dispatchTelemetry(telemetryEvent, effectiveTelemetry, event?.waitUntil);
@@ -269,10 +326,13 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
         headers: {
           'Content-Type': transformed.contentType,
           'X-SnapVibr-Agent': 'ready',
+          'X-SnapVibr-Cache': 'MISS',
           'X-Agent-Ready-Cache': 'MISS',
           'X-Agent-Ready-Tokens-Raw': String(transformed.tokens.rawTokens),
           'X-Agent-Ready-Tokens-Clean': String(transformed.tokens.cleanTokens),
           'X-Agent-Ready-Compression': `${transformed.tokens.reductionPercentage}%`,
+          'X-SnapVibr-Raw-Bytes': String(rawBytes),
+          'X-SnapVibr-Clean-Bytes': String(cleanBytes),
           'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=600',
           'Vary': 'Accept, User-Agent',
         },

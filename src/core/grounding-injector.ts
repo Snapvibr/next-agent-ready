@@ -74,8 +74,9 @@ export function renderFactsList(
 export function renderGroundingSection(config: BrandGroundingConfig): string {
   const parts: string[] = [];
 
-  parts.push('<section data-snapvibr-grounding="true">');
-  parts.push('<h2>Canonical Brand &amp; Product Grounding</h2>');
+  parts.push('<section class="snapvibr-grounding" data-snapvibr-grounding="true" aria-label="Brand Grounding">');
+  parts.push('<h2>Site-owner supplied context</h2>');
+  parts.push('<p>These statements are supplied by the site owner, not independently verified.</p>');
 
   if (config.brandName) {
     parts.push(`<p><strong>Brand:</strong> ${escapeHtml(config.brandName)}</p>`);

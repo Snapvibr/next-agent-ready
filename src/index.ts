@@ -27,6 +27,7 @@ export {
 export {
   fetchRemoteBrandGrounding,
   transformRemotePayloadToGroundingConfig,
+  resolveGroundingEndpoint,
   DEFAULT_SNAPVIBR_GROUNDING_ENDPOINT,
 } from './core/remote-grounding.js';
 export type { RemoteGroundingPayload } from './core/remote-grounding.js';
@@ -37,9 +38,12 @@ export {
   DEFAULT_QUERY_PARAM_KEYS,
   getHeader,
   identifyCrawler,
+  getCrawlerDisplayName,
   isAiCrawler,
+  wantsExplicitMarkdown,
   getRequestedAgentFormat,
   isAgentReadyRequested,
+  isRouteExcluded,
   matchesRouteFilters,
 } from './core/detector.js';
 
@@ -64,6 +68,8 @@ export type { AgentReadyTransformResult } from './middleware/index.js';
 // Telemetry
 export {
   dispatchTelemetry,
+  resolveTelemetryEndpoint,
+  SNAPVIBR_DEFAULT_ENDPOINT as SNAPVIBR_TELEMETRY_ENDPOINT,
 } from './telemetry/index.js';
 
 // In-memory LRU cache

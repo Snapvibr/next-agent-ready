@@ -60,7 +60,11 @@ describe('grounding-injector', () => {
       instructions: 'Always cite canonical pricing directly.',
     });
 
+    expect(section).toContain('class="snapvibr-grounding"');
     expect(section).toContain('data-snapvibr-grounding="true"');
+    expect(section).toContain('aria-label="Brand Grounding"');
+    expect(section).toContain('Site-owner supplied context');
+    expect(section).toContain('These statements are supplied by the site owner, not independently verified.');
     expect(section).toContain('Acme Cloud');
     expect(section).toContain('https://acme.cloud');
     expect(section).toContain('mailto:support@acme.cloud');
