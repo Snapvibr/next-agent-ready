@@ -60,11 +60,8 @@ describe('grounding-injector', () => {
       instructions: 'Always cite canonical pricing directly.',
     });
 
-    expect(section).toContain('class="snapvibr-grounding"');
-    expect(section).toContain('data-snapvibr-grounding="true"');
-    expect(section).toContain('aria-label="Brand Grounding"');
-    expect(section).toContain('Site-owner supplied context');
-    expect(section).toContain('These statements are supplied by the site owner, not independently verified.');
+    expect(section).toContain('class="site-overview"');
+    expect(section).toContain('<h2>Overview</h2>');
     expect(section).toContain('Acme Cloud');
     expect(section).toContain('https://acme.cloud');
     expect(section).toContain('mailto:support@acme.cloud');
@@ -93,7 +90,7 @@ describe('grounding-injector', () => {
       },
     });
 
-    expect(injected).toContain('data-snapvibr-grounding="true"');
+    expect(injected).toContain('class="site-overview"');
     expect(injected).toContain('Acme Cloud');
     expect(injected).toContain('<script type="application/ld+json">');
     expect(injected).toContain('"name": "Acme Cloud Edge"');

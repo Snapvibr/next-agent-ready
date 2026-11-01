@@ -41,7 +41,7 @@ describe('token-counter', () => {
     `;
 
     const cleanHtml = `
-      <section data-snapvibr-grounding="true">
+      <section class="site-overview">
         <h2>Canonical Brand &amp; Product Grounding</h2>
         <p><strong>Brand:</strong> Acme</p>
       </section>

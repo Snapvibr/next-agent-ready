@@ -21,7 +21,7 @@ describe('react components', () => {
       />
     );
 
-    expect(html).toContain('data-snapvibr-grounding="true"');
+    expect(html).toContain('class="site-overview"');
     expect(html).toContain('Acme Test');
     expect(html).toContain('Fast AI');
     expect(html).toContain('Enterprise');
