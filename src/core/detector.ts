@@ -2,7 +2,7 @@
  * User-agent detection and content negotiation for next-agent-ready.
  */
 
-import type { DetectionOptions } from '../types/index.js';
+import type { DetectionOptions, RouteGroundingRule } from '../types/index.js';
 
 export const DEFAULT_AI_CRAWLERS: readonly string[] = [
   'chatgpt-user',
@@ -11,6 +11,8 @@ export const DEFAULT_AI_CRAWLERS: readonly string[] = [
   'oai-searchbot',
   'claudebot',
   'claude-web',
+  'claude-searchbot',
+  'claude-user',
   'anthropic-ai',
   'perplexitybot',
   'perplexity',
@@ -45,19 +47,21 @@ const BOT_DISPLAY_MAP: Record<string, string> = {
   'chatgpt': 'ChatGPT-User',
   'oai-searchbot': 'OAI-SearchBot',
   'claudebot': 'ClaudeBot',
-  'claude-web': 'Claude-Web',
-  'anthropic-ai': 'anthropic-ai',
+  'claude-web': 'ClaudeBot',
+  'claude-searchbot': 'ClaudeBot',
+  'claude-user': 'ClaudeBot',
+  'anthropic-ai': 'ClaudeBot',
   'perplexitybot': 'PerplexityBot',
   'perplexity': 'PerplexityBot',
-  'applebot-extended': 'Applebot-Extended',
-  'applebot': 'Applebot',
+  'applebot-extended': 'AppleBot',
+  'applebot': 'AppleBot',
   'deepseekbot': 'DeepSeekBot',
   'deepseek': 'DeepSeek',
   'google-extended': 'Google-Extended',
-  'gemini': 'Gemini',
+  'gemini': 'Google-Extended',
   'cohere-ai': 'cohere-ai',
   'meta-externalagent': 'Meta-ExternalAgent',
-  'facebookbot': 'FacebookBot',
+  'facebookbot': 'Meta-ExternalAgent',
   'bytespider': 'Bytespider',
   'diffbot': 'Diffbot',
   'ccbot': 'CCBot',
@@ -213,6 +217,38 @@ export function isRouteExcluded(pathname: string, excludedRoutes?: string[]): bo
     }
   }
   return false;
+}
+
+/**
+ * Resolves per-route grounding rule from routeGrounding list.
+ * Directly aligns with Cloudflare Worker and WordPress plugin route grounding resolution.
+ */
+export function resolveRouteRule(
+  routeGrounding?: RouteGroundingRule[],
+  pathname: string = '/'
+): RouteGroundingRule | null {
+  if (!Array.isArray(routeGrounding) || !routeGrounding.length) return null;
+  const normPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  const clean = normPath.split('?')[0].split('#')[0].replace(/\/+$/, '') || '/';
+
+  for (const item of routeGrounding) {
+    if (!item?.route) continue;
+    const itemRoute = item.route.split('?')[0].split('#')[0].replace(/\/+$/, '') || '/';
+    if (clean === itemRoute) return item;
+  }
+
+  for (const item of routeGrounding) {
+    if (!item?.route) continue;
+    if (item.route.endsWith('/*')) {
+      const prefix = item.route.slice(0, -2);
+      if (clean === prefix || clean.startsWith(prefix + '/')) return item;
+    } else if (item.route.endsWith('*')) {
+      const prefix = item.route.slice(0, -1);
+      if (clean.startsWith(prefix)) return item;
+    }
+  }
+
+  return null;
 }
 
 /**

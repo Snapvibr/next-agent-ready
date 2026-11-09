@@ -120,6 +120,30 @@ export interface VerifiedPricingItem {
   features?: string[];
 }
 
+export interface RouteGroundingPricingFact {
+  plan: string;
+  price: string;
+  currency?: string;
+  billingPeriod?: string;
+  features?: string;
+  description?: string;
+}
+
+export interface RouteGroundingRule {
+  route: string;
+  claim?: string;
+  keyFacts?: string[];
+  pricingFacts?: RouteGroundingPricingFact[];
+  actionCenterFindings?: string[];
+  liveAtEdge?: boolean;
+  minification?: 'enable' | 'disable' | 'inherit';
+}
+
+export interface CompetitorDifferentiator {
+  competitor: string;
+  advantage: string;
+}
+
 export interface BrandGroundingConfig {
   /**
    * Official canonical brand or company name.
@@ -150,6 +174,31 @@ export interface BrandGroundingConfig {
    * Canonical factual statements (key-value or list of facts).
    */
   facts?: Record<string, string | number | boolean> | string[];
+
+  /**
+   * Per-route grounding rules (claim, keyFacts, pricing, actionCenterFindings, liveAtEdge, minification).
+   */
+  routeGrounding?: RouteGroundingRule[];
+
+  /**
+   * Global minification setting from SnapVibr remote config.
+   */
+  globalMinificationEnabled?: boolean;
+
+  /**
+   * Remote cache epoch for cache-busting.
+   */
+  cacheEpoch?: number;
+
+  /**
+   * Competitor differentiators for grounding context.
+   */
+  competitorDifferentiators?: CompetitorDifferentiator[];
+
+  /**
+   * Excluded route patterns.
+   */
+  excludedRoutes?: string[];
 
   /**
    * Verified contact channels.

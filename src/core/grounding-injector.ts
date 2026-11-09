@@ -4,6 +4,7 @@
  */
 
 import type { BrandGroundingConfig, VerifiedPricingItem } from '../types/index.js';
+import { resolveRouteRule } from './detector.js';
 
 /**
  * Formats a verified pricing structure into a clean semantic HTML table.
@@ -70,13 +71,52 @@ export function renderFactsList(
 
 /**
  * Generates the Brand Grounding semantic HTML block.
+ * Directly aligns with Cloudflare Worker and WordPress plugin grounding generation.
  */
-export function renderGroundingSection(config: BrandGroundingConfig): string {
+export function renderGroundingSection(config: BrandGroundingConfig, pathname: string = '/'): string {
+  const routeRule = resolveRouteRule(config.routeGrounding, pathname);
+  if (routeRule && routeRule.liveAtEdge === false) {
+    return '';
+  }
+
   const parts: string[] = [];
 
-  parts.push('<section class="site-overview">');
+  parts.push('<section class="site-overview" aria-label="Brand Overview">');
   parts.push('<h2>Overview</h2>');
 
+  // 1. Route-specific context claim
+  if (routeRule?.claim) {
+    parts.push(`<p><strong>Page Context:</strong> ${escapeHtml(routeRule.claim)}</p>`);
+  }
+
+  // 2. Route-specific key facts
+  if (Array.isArray(routeRule?.keyFacts) && routeRule.keyFacts.length > 0) {
+    const listItems = routeRule.keyFacts.map((k) => `<li>${escapeHtml(k)}</li>`).join('');
+    parts.push(`<h3>Page Key Facts</h3>\n<ul>${listItems}</ul>`);
+  }
+
+  // 3. Route-specific pricing facts
+  if (Array.isArray(routeRule?.pricingFacts) && routeRule.pricingFacts.length > 0) {
+    const pricingRows = routeRule.pricingFacts
+      .map((p) => {
+        let row = `<strong>${escapeHtml(p.plan)}:</strong> ${escapeHtml(p.price)}`;
+        if (p.currency) row += ` (${escapeHtml(p.currency)})`;
+        if (p.billingPeriod) row += ` ${escapeHtml(p.billingPeriod)}`;
+        if (p.features) row += ` - ${escapeHtml(p.features)}`;
+        if (p.description) row += ` (${escapeHtml(p.description)})`;
+        return `<li>${row}</li>`;
+      })
+      .join('');
+    parts.push(`<h3>Page Pricing</h3>\n<ul>${pricingRows}</ul>`);
+  }
+
+  // 4. Route-specific Action Center verified notes
+  if (Array.isArray(routeRule?.actionCenterFindings) && routeRule.actionCenterFindings.length > 0) {
+    const findingItems = routeRule.actionCenterFindings.map((f) => `<li>${escapeHtml(f)}</li>`).join('');
+    parts.push(`<h3>Action Center Verified Notes</h3>\n<ul>${findingItems}</ul>`);
+  }
+
+  // 5. Global Brand Name & Canonical URL
   if (config.brandName) {
     parts.push(`<p><strong>Brand:</strong> ${escapeHtml(config.brandName)}</p>`);
   }
@@ -92,14 +132,28 @@ export function renderGroundingSection(config: BrandGroundingConfig): string {
     parts.push(`<p><strong>Description:</strong> ${escapeHtml(config.description)}</p>`);
   }
 
-  if (config.verifiedPricing) {
+  // 6. Global pricing override if route pricing facts is empty
+  if (config.verifiedPricing && (!routeRule?.pricingFacts || routeRule.pricingFacts.length === 0)) {
     parts.push(renderPricingTable(config.verifiedPricing));
   }
 
+  // 7. Global brand facts
   if (config.facts) {
     parts.push(renderFactsList(config.facts));
   }
 
+  // 8. Competitor advantages
+  if (Array.isArray(config.competitorDifferentiators) && config.competitorDifferentiators.length > 0) {
+    const diffItems = config.competitorDifferentiators
+      .filter((d) => d.competitor && d.advantage)
+      .map((d) => `<li><strong>vs. ${escapeHtml(d.competitor)}:</strong> ${escapeHtml(d.advantage)}</li>`)
+      .join('');
+    if (diffItems) {
+      parts.push(`<h3>Competitive Advantages</h3>\n<ul>${diffItems}</ul>`);
+    }
+  }
+
+  // 9. Verified Contact
   if (config.contact) {
     parts.push('<h3>Verified Contact</h3>\n<ul>');
     if (config.contact.supportEmail) {
@@ -151,11 +205,12 @@ export function renderJsonLdScripts(
  */
 export function injectBrandGrounding(
   html: string,
-  config?: BrandGroundingConfig
+  config?: BrandGroundingConfig,
+  pathname: string = '/'
 ): string {
   if (!config) return html;
 
-  const groundingSection = renderGroundingSection(config);
+  const groundingSection = renderGroundingSection(config, pathname);
   const jsonLdBlock = config.jsonLd ? renderJsonLdScripts(config.jsonLd) : '';
 
   let result = html;
@@ -169,11 +224,15 @@ export function injectBrandGrounding(
     }
   }
 
-  // Insert Grounding section into <body> if present, or prepend
-  if (result.includes('<body') && result.includes('>')) {
-    result = result.replace(/(<body[^>]*>)/i, `$1\n${groundingSection}\n`);
-  } else if (result.includes('<main>')) {
-    result = result.replace('<main>', `<main>\n${groundingSection}\n`);
+  if (!groundingSection) {
+    return result;
+  }
+
+  // Insert Grounding section into <body> or <main> if present, or prepend
+  if (result.includes('<main')) {
+    result = result.replace(/(<main\b[^>]*>)/i, `$1\n${groundingSection}\n`);
+  } else if (result.includes('<body') && result.includes('>')) {
+    result = result.replace(/(<body\b[^>]*>)/i, `$1\n${groundingSection}\n`);
   } else {
     result = `${groundingSection}\n${result}`;
   }

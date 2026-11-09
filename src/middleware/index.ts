@@ -5,7 +5,7 @@
 
 import { stripHtmlBloat } from '../core/html-stripper.js';
 import { cleanSemanticHtml } from '../core/semantic-cleaner.js';
-import { injectBrandGrounding } from '../core/grounding-injector.js';
+import { injectBrandGrounding, renderGroundingSection } from '../core/grounding-injector.js';
 import {
   getCrawlerDisplayName,
   getRequestedAgentFormat,
@@ -13,6 +13,7 @@ import {
   isAiCrawler,
   isRouteExcluded,
   matchesRouteFilters,
+  resolveRouteRule,
 } from '../core/detector.js';
 import { calculateTokenCompression } from '../core/token-counter.js';
 import { convertSemanticHtmlToMarkdown } from '../core/text-serializer.js';
@@ -45,17 +46,14 @@ export async function transformToAgentReady(
 ): Promise<AgentReadyTransformResult> {
   const format = context?.format ?? 'html';
 
-  // 1. Strip layout chrome, client-side bundles, styles, modals, and bloat
-  const stripped = stripHtmlBloat(rawHtml, options?.stripper);
+  let pathname = '/';
+  try {
+    if (context?.url) {
+      pathname = new URL(context.url).pathname || '/';
+    }
+  } catch {}
 
-  // 2. Clean and normalize semantic structure (headings, tables, lists, links)
-  const baseUrl = options?.cleaner?.baseUrl ?? (context?.url ? new URL(context.url).origin : undefined);
-  const cleaned = cleanSemanticHtml(stripped, {
-    baseUrl,
-    ...options?.cleaner,
-  });
-
-  // 3. Resolve and inject brand grounding context
+  // 1. Resolve and inject brand grounding context
   let groundingConfig: BrandGroundingConfig | undefined;
   if (typeof options?.grounding === 'function') {
     const dummyReq = new Request(context?.url ?? 'http://localhost');
@@ -77,13 +75,47 @@ export async function transformToAgentReady(
     }
   }
 
-  const grounded = injectBrandGrounding(cleaned, groundingConfig);
+  // 2. Evaluate per-route minification rules and global minification
+  const routeRule = resolveRouteRule(groundingConfig?.routeGrounding, pathname);
+  const shouldMinify = (routeRule?.minification === 'enable') ? true :
+                       (routeRule?.minification === 'disable') ? false :
+                       (groundingConfig?.globalMinificationEnabled ?? true);
 
-  // 4. Deliver trimmed, token-efficient semantic HTML with brand grounding
-  let finalContent: string = grounded;
+  let finalContent: string;
+
+  if (!shouldMinify) {
+    // Minification disabled: Inject grounding into raw origin HTML right after opening <body> or <main>
+    const groundingSection = groundingConfig ? renderGroundingSection(groundingConfig, pathname) : '';
+    if (groundingSection) {
+      if (/<main\b[^>]*>/i.test(rawHtml)) {
+        finalContent = rawHtml.replace(/(<main\b[^>]*>)/i, `$1\n${groundingSection}`);
+      } else if (/<body\b[^>]*>/i.test(rawHtml)) {
+        finalContent = rawHtml.replace(/(<body\b[^>]*>)/i, `$1\n${groundingSection}`);
+      } else {
+        finalContent = groundingSection + rawHtml;
+      }
+    } else {
+      finalContent = rawHtml;
+    }
+  } else {
+    // 3. Strip layout chrome, client-side bundles, styles, modals, and bloat
+    const stripped = stripHtmlBloat(rawHtml, options?.stripper);
+
+    // 4. Clean and normalize semantic structure (headings, tables, lists, links)
+    const baseUrl = options?.cleaner?.baseUrl ?? (context?.url ? new URL(context.url).origin : undefined);
+    const cleaned = cleanSemanticHtml(stripped, {
+      baseUrl,
+      ...options?.cleaner,
+    });
+
+    // 5. Inject Brand Grounding context directly
+    finalContent = injectBrandGrounding(cleaned, groundingConfig, pathname);
+  }
+
+  // 6. Deliver trimmed, token-efficient semantic HTML with brand grounding
   const contentType = 'text/html; charset=utf-8';
 
-  // 5. Allow optional custom user transform hook
+  // 7. Allow optional custom user transform hook
   if (typeof options?.transformHtml === 'function') {
     finalContent = await options.transformHtml(finalContent, {
       url: context?.url ?? '',
@@ -92,7 +124,7 @@ export async function transformToAgentReady(
     });
   }
 
-  // 6. Calculate token reduction metrics
+  // 8. Calculate token reduction metrics
   const tokens = calculateTokenCompression(rawHtml, finalContent);
 
   return {
@@ -165,9 +197,10 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
       options?.telemetry?.snapvibrApiKey ||
       (typeof process !== 'undefined' ? process.env?.SNAPVIBR_API_KEY : undefined);
 
+    let remote: (BrandGroundingConfig & { excludedRoutes?: string[] }) | undefined;
     if (snapvibrKey && options?.autoFetchRemoteGrounding !== false) {
       try {
-        const remote = await fetchRemoteBrandGrounding(url.hostname, snapvibrKey, options?.groundingEndpoint);
+        remote = await fetchRemoteBrandGrounding(url.hostname, snapvibrKey, options?.groundingEndpoint);
         if (remote?.excludedRoutes && isRouteExcluded(pathname, remote.excludedRoutes)) {
           return undefined;
         }
@@ -176,8 +209,9 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
       }
     }
 
-    // Check cache
-    const cacheKey = `${pathname}:${format}`;
+    // Check cache (using cache epoch if available from remote config)
+    const epoch = remote?.cacheEpoch ?? 1;
+    const cacheKey = `${pathname}:${format}:${epoch}`;
     if (cache) {
       const cached = cache.get(cacheKey);
       if (cached) {
@@ -200,7 +234,7 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
           cached: true,
           sample,
           durationMs,
-          format,
+          format: 'clean-html',
           rawBytes: cached.rawBytes,
           cleanBytes: cached.cleanBytes,
           htmlBytes: cached.rawBytes,
@@ -230,7 +264,7 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
             'X-Agent-Ready-Compression': `${cached.tokens.reductionPercentage}%`,
             'X-SnapVibr-Raw-Bytes': String(cached.rawBytes),
             'X-SnapVibr-Clean-Bytes': String(cached.cleanBytes),
-            'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=600',
+            'Cache-Control': 'public, max-age=86400, s-maxage=86400',
             'Vary': 'Accept, User-Agent',
           },
         });
@@ -287,7 +321,7 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
         cached: false,
         sample,
         durationMs,
-        format,
+        format: 'clean-html',
         rawBytes,
         cleanBytes,
         htmlBytes: rawBytes,
@@ -325,7 +359,7 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
           'X-Agent-Ready-Compression': `${transformed.tokens.reductionPercentage}%`,
           'X-SnapVibr-Raw-Bytes': String(rawBytes),
           'X-SnapVibr-Clean-Bytes': String(cleanBytes),
-          'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=600',
+          'Cache-Control': 'public, max-age=86400, s-maxage=86400',
           'Vary': 'Accept, User-Agent',
         },
       });

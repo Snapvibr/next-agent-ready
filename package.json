@@ -1,6 +1,6 @@
 {
   "name": "next-agent-ready",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "High-performance, zero-dependency Next.js edge and node middleware that intercepts AI crawlers and serves token-compressed, clean semantic HTML with grounded brand facts at edge speed.",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -42,7 +42,8 @@
     "build": "tsup",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "keywords": [
     "nextjs",

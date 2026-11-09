@@ -45,6 +45,7 @@ export {
   isAgentReadyRequested,
   isRouteExcluded,
   matchesRouteFilters,
+  resolveRouteRule,
 } from './core/detector.js';
 
 // Token counter and compression calculation

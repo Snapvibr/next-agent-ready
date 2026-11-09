@@ -5,7 +5,12 @@
  */
 
 import { MemoryCache } from '../cache/index.js';
-import type { BrandGroundingConfig, VerifiedPricingItem } from '../types/index.js';
+import type {
+  BrandGroundingConfig,
+  CompetitorDifferentiator,
+  RouteGroundingRule,
+  VerifiedPricingItem,
+} from '../types/index.js';
 
 export const DEFAULT_SNAPVIBR_GROUNDING_ENDPOINT = 'https://ingest.snapvibr.com/api/v1/ai-visibility/grounding';
 
@@ -27,10 +32,13 @@ export interface RemoteGroundingPayload {
   domain: string;
   enabled: boolean;
   groundingEnabled: boolean;
+  globalMinificationEnabled?: boolean;
+  cacheEpoch?: number;
   planExpired?: boolean;
   brandFacts?: string;
   pricingOverride?: string;
   customGrounding?: string;
+  routeGrounding?: RouteGroundingRule[];
   excludedRoutes?: string[];
   updatedAt?: number;
 }
@@ -98,9 +106,11 @@ export function transformRemotePayloadToGroundingConfig(
     }
   }
 
+  const competitorDifferentiators: CompetitorDifferentiator[] = [];
   if (customJson && Array.isArray(customJson.competitorDifferentiators)) {
     for (const diff of customJson.competitorDifferentiators) {
       if (diff && typeof diff === 'object' && diff.competitor && diff.advantage) {
+        competitorDifferentiators.push({ competitor: String(diff.competitor), advantage: String(diff.advantage) });
         factsList.push(`Advantage vs ${diff.competitor}: ${diff.advantage}`);
       }
     }
@@ -127,6 +137,10 @@ export function transformRemotePayloadToGroundingConfig(
     description: factsList[1] || undefined,
     facts: factsList.length > 2 ? factsList.slice(2) : factsList,
     verifiedPricing: verifiedPricing.length > 0 ? verifiedPricing : undefined,
+    routeGrounding: Array.isArray(payload.routeGrounding) ? payload.routeGrounding : undefined,
+    globalMinificationEnabled: payload.globalMinificationEnabled,
+    cacheEpoch: payload.cacheEpoch || payload.updatedAt,
+    competitorDifferentiators: competitorDifferentiators.length > 0 ? competitorDifferentiators : undefined,
     excludedRoutes: Array.isArray(payload.excludedRoutes) ? payload.excludedRoutes : undefined,
     jsonLd: defaultJsonLd,
   };

@@ -120,7 +120,7 @@ curl -i -A "PerplexityBot" http://localhost:3000/
 # Test DeepSeek detection
 curl -i -A "DeepSeek" http://localhost:3000/
 
-# Test explicit Markdown negotiation (for Claude Code or terminal agents)
+# Test explicit agent negotiation (for Claude Code or terminal agents)
 curl -i -H "Accept: text/markdown" http://localhost:3000/
 
 # Verify headers:
