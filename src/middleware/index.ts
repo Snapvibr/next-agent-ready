@@ -110,6 +110,38 @@ export async function transformToAgentReady(
 
     // 5. Inject Brand Grounding context directly
     finalContent = injectBrandGrounding(cleaned, groundingConfig, pathname);
+
+    // 6. Anti-degradation fallback for empty client-side SPA or redirect shells
+    const plainText = cleaned
+      .replace(/<script\b[\s\S]*?<\/script\s*>/gi, '')
+      .replace(/<style\b[\s\S]*?<\/style\s*>/gi, '')
+      .replace(/<[^>]+>/g, '')
+      .trim();
+    if (plainText.length < 150) {
+      const titleMatch = rawHtml.match(/<title[^>]*>([\s\S]*?)<\/title\s*>/i);
+      let title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+      const metaDescMatch = rawHtml.match(/<meta\b[^>]*name=["']description["'][^>]*content=["']([^"']*)["']/i) ||
+                            rawHtml.match(/<meta\b[^>]*property=["']og:description["'][^>]*content=["']([^"']*)["']/i);
+      let desc = metaDescMatch ? metaDescMatch[1].trim() : '';
+      if (!desc) {
+        const jsonLdDesc = rawHtml.match(/"description"\s*:\s*"([^"]+)"/i);
+        if (jsonLdDesc) desc = jsonLdDesc[1].replace(/\\"/g, '"');
+      }
+      if (!title || title.toLowerCase() === 'index') {
+        const jsonLdName = rawHtml.match(/"name"\s*:\s*"([^"]+)"/i);
+        if (jsonLdName) title = jsonLdName[1].replace(/\\"/g, '"');
+      }
+      if (title || desc) {
+        const fallbackSection = `<section data-agent-fallback="true">\n${title ? `<h1>${title}</h1>\n` : ''}${desc ? `<p>${desc}</p>\n` : ''}</section>\n`;
+        if (/<body\b[^>]*>/i.test(finalContent)) {
+          finalContent = finalContent.replace(/(<body\b[^>]*>)/i, `$1\n${fallbackSection}`);
+        } else if (/<main\b[^>]*>/i.test(finalContent)) {
+          finalContent = finalContent.replace(/(<main\b[^>]*>)/i, `$1\n${fallbackSection}`);
+        } else {
+          finalContent = fallbackSection + finalContent;
+        }
+      }
+    }
   }
 
   // 6. Deliver trimmed, token-efficient semantic HTML with brand grounding

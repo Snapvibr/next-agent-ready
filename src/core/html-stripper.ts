@@ -39,28 +39,33 @@ export function stripHtmlBloat(html: string, options?: StripperOptions): string 
   // 2. Preserve application/ld+json before script stripping if requested
   const jsonLdBlocks: string[] = [];
   if (opts.preserveJsonLd) {
-    const jsonLdRegex = /<script\b[^>]*\btype=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    const jsonLdRegex = /<script\b[^>]*\btype=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script\s*>/gi;
     let match: RegExpExecArray | null;
     while ((match = jsonLdRegex.exec(cleaned)) !== null) {
       jsonLdBlocks.push(match[0]);
     }
   }
 
-  // 3. Strip all <script> tags
+  // 3. Remove React SSR boundary comments and general HTML comments FIRST
+  // Stripping comments before scripts prevents embedded templates with '-->' from breaking comment pairing
+  cleaned = cleaned.replace(/<!--\$[\s\S]*?-->/gi, '');
+  cleaned = cleaned.replace(/<!--(?!AGENT:)[\s\S]*?-->/gi, '');
+
+  // 4. Strip all <script> tags (with whitespace-tolerant closing tags)
   if (opts.stripScripts) {
-    cleaned = cleaned.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    cleaned = cleaned.replace(/<script(?=[\s>/])[\s\S]*?<\/script\s*>/gi, '');
   }
 
-  // 4. Strip <style> tags and CSS link tags
+  // 5. Strip <style> tags (with whitespace-tolerant closing tags) and CSS link tags
   if (opts.stripStyles) {
-    cleaned = cleaned.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+    cleaned = cleaned.replace(/<style(?=[\s>/])[\s\S]*?<\/style\s*>/gi, '');
     cleaned = cleaned.replace(
       /<link\b[^>]*\brel=["'](?:stylesheet|preload|prefetch|modulepreload)["'][^>]*\/?>/gi,
       ''
     );
   }
 
-  // 5. Strip non-semantic media and embeds
+  // 6. Strip non-semantic media and embeds (use lookahead (?=[\s>/]) to avoid matching Web Components like <svg-icon>)
   const mediaTags = [
     'noscript',
     'template',
@@ -75,53 +80,55 @@ export function stripHtmlBloat(html: string, options?: StripperOptions): string 
   ];
 
   for (const tag of mediaTags) {
-    const regex = new RegExp(`<${tag}\\b[^<]*(?:(?!<\\/${tag}>)<[^<]*)*<\\/${tag}>`, 'gi');
+    const regex = new RegExp(`<${tag}(?=[\\s>/])[\\s\\S]*?<\\/${tag}\\s*>`, 'gi');
     cleaned = cleaned.replace(regex, '');
-    const selfClosing = new RegExp(`<${tag}\\b[^>]*\\/>`, 'gi');
+    const selfClosing = new RegExp(`<${tag}(?=[\\s>/])[^>]*\\/>`, 'gi');
     cleaned = cleaned.replace(selfClosing, '');
   }
 
-  // 6. Strip layout chrome: nav, footer, aside, and optional header
+  // 7. Strip layout chrome: nav, footer, aside, and header (preserving headings inside header)
   if (opts.stripNav) {
-    cleaned = cleaned.replace(/<nav\b[^<]*(?:(?!<\/nav>)<[^<]*)*<\/nav>/gi, '');
+    cleaned = cleaned.replace(/<nav(?=[\s>/])[\s\S]*?<\/nav\s*>/gi, '');
   }
   if (opts.stripFooter) {
-    cleaned = cleaned.replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, '');
+    cleaned = cleaned.replace(/<footer(?=[\s>/])[\s\S]*?<\/footer\s*>/gi, '');
   }
   if (opts.stripAside) {
-    cleaned = cleaned.replace(/<aside\b[^<]*(?:(?!<\/aside>)<[^<]*)*<\/aside>/gi, '');
+    cleaned = cleaned.replace(/<aside(?=[\s>/])[\s\S]*?<\/aside\s*>/gi, '');
   }
   if (opts.stripHeader) {
-    // Only strip header if not marked with data-agent-only or data-agent-grounding
+    // Preserve any heading tags inside header so hero h1/h2 tags are not dropped on SSR sites
     cleaned = cleaned.replace(
-      /<header(?![^>]*\bdata-agent-(?:only|grounding)\b)\b[^<]*(?:(?!<\/header>)<[^<]*)*<\/header>/gi,
-      ''
+      /<header(?![^>]*\bdata-agent-(?:only|grounding)\b)(?=[\s>/])[^>]*>([\s\S]*?)<\/header\s*>/gi,
+      (_, inner) => {
+        if (!inner || typeof inner !== 'string') return '';
+        const headings = inner.match(/<h[1-6]\b[^>]*>[\s\S]*?<\/h[1-6]\s*>/gi);
+        return headings ? headings.join('\n') : '';
+      }
     );
   }
 
-  // 7. Strip modals, dialogs, cookie banners, consent notices, and popups
+  // 8. Strip modals, dialogs, cookie banners, consent notices, and popups
   if (opts.stripModalsAndBanners) {
-    // Dialog and alertdialog roles
+    // Dialog element
+    cleaned = cleaned.replace(/<dialog(?=[\s>/])[\s\S]*?<\/dialog\s*>/gi, '');
+
+    // Dialog and alertdialog roles on div elements (avoid matching across nested <div> tags)
     cleaned = cleaned.replace(
-      /<([a-zA-Z0-9-]+)[^>]*(?:\brole=["'](?:dialog|alertdialog)["']|\baria-modal=["']true["'])[^>]*>[\s\S]*?<\/\1>/gi,
+      /<div[^>]*(?:\brole=["'](?:dialog|alertdialog)["']|\baria-modal=["']true["'])[^>]*>(?:(?!<div(?=[\s>/]))[\s\S])*?<\/div\s*>/gi,
       ''
     );
 
-    // Common cookie / banner / modal class and id patterns
-    const bannerPattern = /<([a-zA-Z0-9-]+)[^>]*(?:id|class)=["'][^"']*\b(?:cookie[-_]?(?:banner|consent|notice|law|modal)?|consent[-_]?(?:banner|modal|popup|bar)?|gdpr[-_]?(?:banner|notice)?|modal[-_]?(?:backdrop|dialog|overlay)?|popup[-_]?(?:overlay|dialog|banner)?)\b[^"']*["'][^>]*>[\s\S]*?<\/\1>/gi;
+    // Common cookie / banner / modal class and id patterns on div elements
+    const bannerPattern = /<div[^>]*(?:id|class)=["'][^"']*\b(?:cookie[-_]?(?:banner|consent|notice|law|modal)?|consent[-_]?(?:banner|modal|popup|bar)?|gdpr[-_]?(?:banner|notice)?|modal[-_]?(?:backdrop|dialog|overlay)?|popup[-_]?(?:overlay|dialog|banner)?)\b[^"']*["'][^>]*>(?:(?!<div(?=[\s>/]))[\s\S])*?<\/div\s*>/gi;
     cleaned = cleaned.replace(bannerPattern, '');
   }
 
-  // 8. Remove React SSR boundary comments: <!--$--> <!--/$--> <!--$?--> <!--$!-->
-  cleaned = cleaned.replace(/<!--\$[\s\S]*?-->/gi, '');
-
-  // 9. Remove HTML comments (except agent instructions if any)
-  cleaned = cleaned.replace(/<!--(?!AGENT:)[\s\S]*?-->/gi, '');
-
-  // 10. Remove visually hidden human elements (aria-hidden="true" or display:none)
+  // 9. Remove visually hidden human elements (aria-hidden="true" or display:none)
   // unless explicitly marked with data-agent-only="true"
+  // Uses (?:(?!<\1(?=[\s>/]))[\s\S])*? to prevent slicing nested tags of the same name
   cleaned = cleaned.replace(
-    /<([a-zA-Z0-9-]+)(?![^>]*\bdata-agent-(?:only|instruction)\b)[^>]*(?:aria-hidden=["']true["']|\bstyle=["'][^"']*display:\s*none[^"']*["'])[^>]*>[\s\S]*?<\/\1>/gi,
+    /<([a-zA-Z0-9-]+)(?![^>]*\bdata-agent-(?:only|instruction)\b)[^>]*(?:aria-hidden=["']true["']|\bstyle=["'][^"']*display:\s*none[^"']*["'])[^>]*>(?:(?!<\1(?=[\s>/]))[\s\S])*?<\/\1\s*>/gi,
     ''
   );
 

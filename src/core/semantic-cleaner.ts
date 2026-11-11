@@ -179,7 +179,7 @@ export function cleanSemanticHtml(html: string, options?: CleanerOptions): strin
   // 1. Temporarily isolate Schema.org JSON-LD scripts to preserve them verbatim
   const jsonLdHolders: string[] = [];
   cleaned = cleaned.replace(
-    /<script\b[^>]*\btype=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
+    /<script\b[^>]*\btype=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script\s*>/gi,
     (match) => {
       const placeholder = `<!--JSON_LD_PLACEHOLDER_${jsonLdHolders.length}-->`;
       jsonLdHolders.push(match);
@@ -189,7 +189,7 @@ export function cleanSemanticHtml(html: string, options?: CleanerOptions): strin
 
   // 2. Temporarily isolate <pre><code> blocks to preserve whitespace inside them
   const codeHolders: string[] = [];
-  cleaned = cleaned.replace(/<pre\b[^>]*>([\s\S]*?)<\/pre>/gi, (match) => {
+  cleaned = cleaned.replace(/<pre\b[^>]*>([\s\S]*?)<\/pre\s*>/gi, (match) => {
     const placeholder = `<!--CODE_PLACEHOLDER_${codeHolders.length}-->`;
     codeHolders.push(match);
     return placeholder;
@@ -202,8 +202,8 @@ export function cleanSemanticHtml(html: string, options?: CleanerOptions): strin
 
   // 4. Convert non-semantic layout tags with textual content to semantic equivalents
   // Replace <b> with <strong>, <i> with <em>
-  cleaned = cleaned.replace(/<b\b[^>]*>/gi, '<strong>').replace(/<\/b>/gi, '</strong>');
-  cleaned = cleaned.replace(/<i\b[^>]*>/gi, '<em>').replace(/<\/i>/gi, '</em>');
+  cleaned = cleaned.replace(/<b\b[^>]*>/gi, '<strong>').replace(/<\/b\s*>/gi, '</strong>');
+  cleaned = cleaned.replace(/<i\b[^>]*>/gi, '<em>').replace(/<\/i\s*>/gi, '</em>');
 
   // 5. Unwrap redundant non-semantic wrappers (div, span) where possible
   // Repeatedly peel empty or simple wrapper tags
@@ -215,24 +215,26 @@ export function cleanSemanticHtml(html: string, options?: CleanerOptions): strin
 
     // Remove empty tags (except self-closing img, meta, br, hr)
     cleaned = cleaned.replace(
-      /<(p|span|div|section|article|li|ul|ol|strong|em|h[1-6])>\s*<\/\1>/gi,
+      /<(p|span|div|section|article|li|ul|ol|strong|em|h[1-6])>\s*<\/\1\s*>/gi,
       ''
     );
 
     // Unwrap <span>content</span> -> content
-    cleaned = cleaned.replace(/<span>([\s\S]*?)<\/span>/gi, '$1');
+    cleaned = cleaned.replace(/<span>([\s\S]*?)<\/span\s*>/gi, '$1');
 
     // Convert <div>text</div> (no child block tags) into <p>text</p>
     cleaned = cleaned.replace(
-      /<div>([^<]+)<\/div>/gi,
+      /<div>([^<]+)<\/div\s*>/gi,
       '<p>$1</p>'
     );
   }
 
-  // 6. Restore code blocks (cleaning attributes from <pre> and <code>)
+  // 6. Restore code blocks (cleaning attributes from <pre> and <code(?=[\s>/]))
   cleaned = cleaned.replace(/<!--CODE_PLACEHOLDER_(\d+)-->/g, (_, idx) => {
     const original = codeHolders[Number(idx)];
-    return original.replace(/<pre[^>]*>/i, '<pre>').replace(/<code[^>]*>/i, '<code>');
+    return original
+      .replace(/<pre[^>]*>/i, '<pre>')
+      .replace(/<code(?=[\s>\/])[^>]*>/i, '<code>');
   });
 
   // 7. Restore JSON-LD placeholders
