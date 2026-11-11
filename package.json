@@ -1,6 +1,6 @@
 {
   "name": "next-agent-ready",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "High-performance, zero-dependency Next.js edge and node middleware that intercepts AI crawlers and serves token-compressed, clean semantic HTML with grounded brand facts at edge speed.",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",

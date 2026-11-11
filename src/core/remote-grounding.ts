@@ -8,6 +8,7 @@ import { MemoryCache } from '../cache/index.js';
 import type {
   BrandGroundingConfig,
   CompetitorDifferentiator,
+  LocationGroundingFacts,
   RouteGroundingRule,
   VerifiedPricingItem,
 } from '../types/index.js';
@@ -41,6 +42,26 @@ export interface RemoteGroundingPayload {
   routeGrounding?: RouteGroundingRule[];
   excludedRoutes?: string[];
   updatedAt?: number;
+  locationFacts?: LocationGroundingFacts;
+  businessType?: string;
+  pricingModel?: string;
+  hourlyRate?: {
+    minRate?: string | number;
+    maxRate?: string | number;
+    currency?: string;
+    description?: string;
+  };
+  consultationDetails?: {
+    isFree?: boolean;
+    durationMinutes?: number;
+    title?: string;
+    description?: string;
+  };
+  customQuoteDetails?: {
+    startingPrice?: string | number;
+    currency?: string;
+    description?: string;
+  };
 }
 
 // 1-hour in-memory cache for remote grounding facts (matches Cloudflare Worker edge cache)
@@ -119,16 +140,50 @@ export function transformRemotePayloadToGroundingConfig(
   const verifiedPricing = parsePricingOverride(payload.pricingOverride);
   const brandName = factsList[0] || payload.domain;
 
+  let businessType = 'Organization';
+  const loc = payload.locationFacts;
+  if (loc?.businessType) {
+    businessType = loc.businessType;
+  } else if (payload.businessType) {
+    const bt = String(payload.businessType).toLowerCase();
+    if (bt.includes('law') || bt.includes('legal')) businessType = 'LegalService';
+    else if (bt.includes('medic') || bt.includes('health') || bt.includes('dental')) businessType = 'MedicalBusiness';
+    else if (bt.includes('trade') || bt.includes('plumb') || bt.includes('hvac') || bt.includes('roof') || bt.includes('contractor')) businessType = 'HomeAndConstructionBusiness';
+    else if (bt.includes('local')) businessType = 'LocalBusiness';
+  }
+
+  const publisherObj: Record<string, unknown> = {
+    '@type': businessType,
+    name: brandName,
+    url: `https://${payload.domain}`,
+  };
+
+  if (loc) {
+    if (loc.phone) publisherObj.telephone = loc.phone;
+    if (loc.address || loc.city) {
+      publisherObj.address = {
+        '@type': 'PostalAddress',
+        ...(loc.address ? { streetAddress: loc.address } : {}),
+        ...(loc.city ? { addressLocality: loc.city } : {}),
+        ...(loc.stateRegion ? { addressRegion: loc.stateRegion } : {}),
+        ...(loc.postalCode ? { postalCode: loc.postalCode } : {}),
+        ...(loc.country ? { addressCountry: loc.country } : {}),
+      };
+    }
+    if (Array.isArray(loc.serviceAreas) && loc.serviceAreas.length > 0) {
+      publisherObj.areaServed = loc.serviceAreas;
+    }
+    if (loc.operatingHours) {
+      publisherObj.openingHours = loc.operatingHours;
+    }
+  }
+
   const defaultJsonLd: Record<string, unknown> = {
     '@context': 'https://schema.org',
     '@type': 'WebPage',
     name: brandName,
     url: `https://${payload.domain}`,
-    publisher: {
-      '@type': 'Organization',
-      name: brandName,
-      url: `https://${payload.domain}`,
-    },
+    publisher: publisherObj,
   };
 
   return {
@@ -136,6 +191,12 @@ export function transformRemotePayloadToGroundingConfig(
     canonicalUrl: `https://${payload.domain}`,
     description: factsList[1] || undefined,
     facts: factsList.length > 2 ? factsList.slice(2) : factsList,
+    locationFacts: payload.locationFacts,
+    businessType: payload.businessType,
+    pricingModel: payload.pricingModel,
+    hourlyRate: payload.hourlyRate,
+    consultationDetails: payload.consultationDetails,
+    customQuoteDetails: payload.customQuoteDetails,
     verifiedPricing: verifiedPricing.length > 0 ? verifiedPricing : undefined,
     routeGrounding: Array.isArray(payload.routeGrounding) ? payload.routeGrounding : undefined,
     globalMinificationEnabled: payload.globalMinificationEnabled,

@@ -144,6 +144,21 @@ export interface CompetitorDifferentiator {
   advantage: string;
 }
 
+export interface LocationGroundingFacts {
+  businessType?: string;
+  address?: string;
+  city?: string;
+  stateRegion?: string;
+  postalCode?: string;
+  country?: string;
+  serviceAreas?: string[];
+  phone?: string;
+  operatingHours?: string;
+  emergency24_7?: boolean;
+  licenseNumber?: string;
+  bookingUrl?: string;
+}
+
 export interface BrandGroundingConfig {
   /**
    * Official canonical brand or company name.
@@ -174,6 +189,50 @@ export interface BrandGroundingConfig {
    * Canonical factual statements (key-value or list of facts).
    */
   facts?: Record<string, string | number | boolean> | string[];
+
+  /**
+   * Physical office, clinic, or service coverage area facts.
+   */
+  locationFacts?: LocationGroundingFacts;
+
+  /**
+   * Primary business classification / archetype (e.g. Local Trades, Clinic, Law Practice, B2B SaaS).
+   */
+  businessType?: string;
+
+  /**
+   * Pricing engagement model ('subscription', 'hourly', 'free_consultation', 'custom_quote').
+   */
+  pricingModel?: string;
+
+  /**
+   * Hourly billing configuration for consulting, trades, or professional services.
+   */
+  hourlyRate?: {
+    minRate?: string | number;
+    maxRate?: string | number;
+    currency?: string;
+    description?: string;
+  };
+
+  /**
+   * Consultation policy (e.g. 15-minute free discovery call).
+   */
+  consultationDetails?: {
+    isFree?: boolean;
+    durationMinutes?: number;
+    title?: string;
+    description?: string;
+  };
+
+  /**
+   * Custom estimate and bespoke quote policy.
+   */
+  customQuoteDetails?: {
+    startingPrice?: string | number;
+    currency?: string;
+    description?: string;
+  };
 
   /**
    * Per-route grounding rules (claim, keyFacts, pricing, actionCenterFindings, liveAtEdge, minification).

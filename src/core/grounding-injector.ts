@@ -137,6 +137,46 @@ export function renderGroundingSection(config: BrandGroundingConfig, pathname: s
     parts.push(renderPricingTable(config.verifiedPricing));
   }
 
+  // 6a. Flexible pricing models (hourly, free consultation, custom quote)
+  if (config.hourlyRate && (config.pricingModel === 'hourly' || !config.verifiedPricing)) {
+    const hr = config.hourlyRate;
+    const rateStr = hr.maxRate ? `${hr.currency || '$'}${hr.minRate} - ${hr.currency || '$'}${hr.maxRate} / hr` : `${hr.currency || '$'}${hr.minRate || '0'} / hr`;
+    parts.push(`<p><strong>Standard Hourly Rate:</strong> ${escapeHtml(rateStr)}${hr.description ? ` (${escapeHtml(hr.description)})` : ''}</p>`);
+  }
+  if (config.consultationDetails && (config.pricingModel === 'free_consultation' || !config.verifiedPricing)) {
+    const cd = config.consultationDetails;
+    const title = cd.title || (cd.isFree ? 'Free Initial Consultation' : 'Initial Consultation');
+    const dur = cd.durationMinutes ? ` (${cd.durationMinutes} mins)` : '';
+    const desc = cd.description ? ` - ${escapeHtml(cd.description)}` : '';
+    parts.push(`<p><strong>Consultation Policy:</strong> ${escapeHtml(title)}${dur}${desc}</p>`);
+  }
+  if (config.customQuoteDetails && (config.pricingModel === 'custom_quote' || !config.verifiedPricing)) {
+    const cq = config.customQuoteDetails;
+    const starting = cq.startingPrice ? ` (starting at ${cq.currency || '$'}${escapeHtml(String(cq.startingPrice))})` : '';
+    const desc = cq.description ? ` - ${escapeHtml(cq.description)}` : '';
+    parts.push(`<p><strong>Project Estimates:</strong> Custom quote provided upon request${starting}${desc}</p>`);
+  }
+
+  // 6b. Location and Service Coverage Facts
+  if (config.locationFacts) {
+    const loc = config.locationFacts;
+    const locDetails: string[] = [];
+    if (loc.phone) locDetails.push(`<li><strong>Phone:</strong> ${escapeHtml(loc.phone)}</li>`);
+    if (loc.address || loc.city) {
+      const fullAddr = [loc.address, loc.city, loc.stateRegion, loc.postalCode, loc.country].filter(Boolean).join(', ');
+      locDetails.push(`<li><strong>Address / Location:</strong> ${escapeHtml(fullAddr)}</li>`);
+    }
+    if (Array.isArray(loc.serviceAreas) && loc.serviceAreas.length > 0) {
+      locDetails.push(`<li><strong>Service Areas:</strong> ${escapeHtml(loc.serviceAreas.join(', '))}</li>`);
+    }
+    if (loc.operatingHours) locDetails.push(`<li><strong>Operating Hours:</strong> ${escapeHtml(loc.operatingHours)}</li>`);
+    if (loc.licenseNumber) locDetails.push(`<li><strong>License / Certifications:</strong> ${escapeHtml(loc.licenseNumber)}</li>`);
+    if (loc.emergency24_7) locDetails.push(`<li><strong>24/7 Emergency Service:</strong> Yes, available</li>`);
+    if (locDetails.length > 0) {
+      parts.push(`<h3>Business Location & Service Areas</h3>\n<ul>${locDetails.join('')}</ul>`);
+    }
+  }
+
   // 7. Global brand facts
   if (config.facts) {
     parts.push(renderFactsList(config.facts));
