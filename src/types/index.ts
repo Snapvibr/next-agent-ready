@@ -378,6 +378,19 @@ export interface CacheConfig {
 
 export interface AgentReadyOptions {
   /**
+   * Domain name of the site (e.g. 'codifyplus.com').
+   * Used for remote brand grounding lookup and telemetry domain fallback.
+   * If omitted, falls back to url.hostname from incoming requests.
+   */
+  domain?: string;
+
+  /**
+   * Enable verbose console warnings during development if crawler interception is bypassed or errors occur.
+   * Defaults to true in non-production environments (process.env.NODE_ENV !== 'production').
+   */
+  debug?: boolean;
+
+  /**
    * Detection options for recognizing AI crawlers and query parameters.
    */
   detection?: DetectionOptions;

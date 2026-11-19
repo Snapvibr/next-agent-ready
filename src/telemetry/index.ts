@@ -95,7 +95,11 @@ export function dispatchTelemetry(
   })();
 
   if (typeof waitUntil === 'function') {
-    waitUntil(promise);
+    try {
+      waitUntil(promise);
+    } catch {
+      promise.catch(() => {});
+    }
   } else {
     // Fire and forget in standard runtime
     promise.catch(() => {});

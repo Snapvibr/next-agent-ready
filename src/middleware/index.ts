@@ -67,8 +67,8 @@ export async function transformToAgentReady(
       (typeof process !== 'undefined' ? process.env?.SNAPVIBR_API_KEY : undefined);
     if (snapvibrKey && context?.url) {
       try {
-        const hostname = new URL(context.url).hostname;
-        groundingConfig = await fetchRemoteBrandGrounding(hostname, snapvibrKey, options?.groundingEndpoint);
+        const domain = options?.domain || new URL(context.url).hostname;
+        groundingConfig = await fetchRemoteBrandGrounding(domain, snapvibrKey, options?.groundingEndpoint);
       } catch {
         // Continue without remote grounding if URL is malformed
       }
@@ -216,10 +216,11 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
     const rawCrawler = identifyCrawler(userAgent, options?.detection?.customUserAgents);
     const crawlerName = rawCrawler ?? 'Accept-Header-Client';
     const botDisplayName = getCrawlerDisplayName(rawCrawler);
+    const targetDomain = options?.domain || url.hostname;
     const siteId =
       options?.siteId ||
       (typeof process !== 'undefined' ? process.env?.SNAPVIBR_SITE_ID : undefined) ||
-      url.hostname;
+      targetDomain;
     const isBot = isAiCrawler(userAgent, options?.detection);
     const sample = request.headers.get('x-snapvibr-test') === '1' || !isBot;
 
@@ -232,7 +233,7 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
     let remote: (BrandGroundingConfig & { excludedRoutes?: string[] }) | undefined;
     if (snapvibrKey && options?.autoFetchRemoteGrounding !== false) {
       try {
-        remote = await fetchRemoteBrandGrounding(url.hostname, snapvibrKey, options?.groundingEndpoint);
+        remote = await fetchRemoteBrandGrounding(targetDomain, snapvibrKey, options?.groundingEndpoint);
         if (remote?.excludedRoutes && isRouteExcluded(pathname, remote.excludedRoutes)) {
           return undefined;
         }
@@ -240,6 +241,9 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
         // Fallback to serving request if remote check fails
       }
     }
+
+    // Safe waitUntil helper preserving execution context in Next.js Edge runtime
+    const safeWaitUntil = event?.waitUntil ? (p: Promise<unknown>) => event.waitUntil!(p) : undefined;
 
     // Check cache (using cache epoch if available from remote config)
     const epoch = remote?.cacheEpoch ?? 1;
@@ -257,7 +261,7 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
         };
 
         const telemetryPayload: AgentTelemetryEvent = {
-          domain: url.hostname,
+          domain: targetDomain,
           siteId,
           path: pathname,
           bot: botDisplayName,
@@ -282,7 +286,7 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
           cacheHit: true,
         };
 
-        dispatchTelemetry(telemetryPayload, effectiveTelemetry, event?.waitUntil);
+        dispatchTelemetry(telemetryPayload, effectiveTelemetry, safeWaitUntil);
 
         return new Response(cached.content, {
           status: 200,
@@ -344,7 +348,7 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
 
       // Dispatch non-blocking telemetry
       const telemetryEvent: AgentTelemetryEvent = {
-        domain: url.hostname,
+        domain: targetDomain,
         siteId,
         path: pathname,
         bot: botDisplayName,
@@ -377,7 +381,7 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
           (typeof process !== 'undefined' ? process.env?.SNAPVIBR_API_KEY : undefined),
       };
 
-      dispatchTelemetry(telemetryEvent, effectiveTelemetry, event?.waitUntil);
+      dispatchTelemetry(telemetryEvent, effectiveTelemetry, safeWaitUntil);
 
       return new Response(transformed.content, {
         status: upstreamRes.status,
@@ -395,8 +399,11 @@ export function createAgentReadyMiddleware(options?: AgentReadyOptions) {
           'Vary': 'Accept, User-Agent',
         },
       });
-    } catch {
-      // Fallback: continue default pipeline if internal fetch fails
+    } catch (err) {
+      if (options?.debug || (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production')) {
+        console.warn('[next-agent-ready] Interception bypassed:', err);
+      }
+      // Fallback: continue default pipeline if internal fetch or transform fails
       return undefined;
     }
   };
