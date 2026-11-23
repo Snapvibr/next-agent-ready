@@ -67,7 +67,7 @@ const BOT_DISPLAY_MAP: Record<string, string> = {
   'applebot-extended': 'AppleBot',
   'applebot': 'AppleBot',
   'deepseekbot': 'DeepSeekBot',
-  'deepseek': 'DeepSeekBot',
+  'deepseek': 'DeepSeek',
   'google-extended': 'Google-Extended',
   'gemini': 'Google-Extended',
   'grokbot': 'GrokBot',
